@@ -24,11 +24,11 @@ import (
 )
 
 func TestParseResumeOptionsUsesPreviewAndWorkspaceScopes(t *testing.T) {
-	options, err := parseResumeOptions([]string{"--preview", "--workspace", "native-session"})
+	options, err := parseResumeOptions([]string{"--preview", "--workspace", "native-session", "--no-environment"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !options.preview || !options.workspace || options.session != "native-session" {
+	if !options.preview || !options.workspace || !options.noEnvironment || options.session != "native-session" {
 		t.Fatalf("options = %+v", options)
 	}
 	options, err = parseResumeOptions([]string{"logical-session", "--agent", " claude-code ", "--replica=replica-1"})

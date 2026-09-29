@@ -31,6 +31,7 @@ type resumeOptions struct {
 	allowLimited       bool
 	allowDivergent     bool
 	noWorkspaceContext bool
+	noEnvironment      bool
 	replaceExisting    bool
 	version            int
 	session            string
@@ -143,6 +144,7 @@ func parseResumeOptions(args []string) (resumeOptions, error) {
 	flags.BoolVar(&options.allowLimited, "allow-limited", false, "allow restore when structural compatibility is limited")
 	flags.BoolVar(&options.allowDivergent, "allow-divergent", false, "allow restore despite a divergent workspace")
 	flags.BoolVar(&options.noWorkspaceContext, "no-workspace-context", false, "do not inject workspace differences into the restored session")
+	flags.BoolVar(&options.noEnvironment, "no-environment", false, "do not apply filtered environment components")
 	flags.BoolVar(&options.replaceExisting, "replace-existing", false, "replace an existing local session")
 	flags.IntVar(&options.version, "version", -1, "select a zero-based remote fork version")
 	flags.StringVar(&options.agent, "agent", "", "select the source Agent for a Session Hub resume")
@@ -355,7 +357,7 @@ func collectResumeWithPromptMode(ctx context.Context, c *config.Config, configDi
 	var environmentSession *listSession
 	var environmentReport *environmentPreviewReport
 	var workspaceInspection *projectStateInspection
-	if fingerprint != nil {
+	if fingerprint != nil && (options.workspace || !options.noEnvironment) {
 		localState, err = newEnvironmentContext(c.Device.ID, secrets.IdentifierKey, projectID, current.Identity.Value, configDir, current.Root, groups, access)
 		if err != nil {
 			return resumeReport{}, fmt.Errorf("resume: prepare environment context: %w", err)
@@ -447,7 +449,7 @@ func collectResumeWithPromptMode(ctx context.Context, c *config.Config, configDi
 			return resumeReport{}, fmt.Errorf("resume: target session was restored, but workspace restore failed: %w", err)
 		}
 	}
-	if environmentSession != nil && environmentReport != nil {
+	if !options.noEnvironment && environmentSession != nil && environmentReport != nil {
 		if err := applyEnvironmentComponents(ctx, localState, environmentSession, environmentReport); err != nil {
 			return resumeReport{}, fmt.Errorf("resume: target session was restored, but environment restore failed: %w", err)
 		}

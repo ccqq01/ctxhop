@@ -96,6 +96,35 @@ func TestCodexLayoutDiscoversReadsAndWritesSessions(t *testing.T) {
 	}
 }
 
+func TestCodexTitleSkipsInternalContextAndKeepsUserPrompt(t *testing.T) {
+	home := t.TempDir()
+	projectRoot := filepath.Join(t.TempDir(), "project")
+	id := "44444444-4444-4444-8444-444444444444"
+	path := filepath.Join(home, "sessions", "2026", "08", "20", "rollout-2026-08-20T10-20-30-"+id+".jsonl")
+	records := [][]byte{
+		codexTestRecord(t, "2026-08-20T10:20:29Z", "session_meta", map[string]any{
+			"session_id": id,
+			"cwd":        projectRoot,
+		}),
+		codexTestRecord(t, "2026-08-20T10:20:30Z", "response_item", map[string]any{
+			"role": "user", "content": []map[string]string{{"text": "<recommended_plugins> internal setup"}},
+		}),
+		codexTestRecord(t, "2026-08-20T10:20:31Z", "response_item", map[string]any{
+			"role": "user", "content": []map[string]string{{"text": "帮我准备面试复盘"}},
+		}),
+	}
+	if err := writeSessionAt(path, records); err != nil {
+		t.Fatal(err)
+	}
+	refs, err := (CodexLayout{Home: home}).DiscoverSessions(projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 1 || refs[0].Title != "帮我准备面试复盘" {
+		t.Fatalf("refs = %+v, want the genuine user prompt as title", refs)
+	}
+}
+
 func TestCodexLayoutSkipsAnotherProject(t *testing.T) {
 	home := t.TempDir()
 	projectRoot := filepath.Join(t.TempDir(), "project")

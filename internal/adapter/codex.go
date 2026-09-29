@@ -538,6 +538,7 @@ func observeCodexTime(summary *codexSummary, value string) {
 }
 
 func codexPrompt(recordType string, payload map[string]json.RawMessage) string {
+	var prompt string
 	if recordType == "event_msg" {
 		kind := rawString(payload["type"])
 		if kind != "user_message" && kind != "user" && kind != "input" {
@@ -545,21 +546,40 @@ func codexPrompt(recordType string, payload map[string]json.RawMessage) string {
 		}
 		for _, key := range []string{"message", "text"} {
 			if value := rawString(payload[key]); value != "" {
-				return value
+				prompt = value
+				break
 			}
 		}
 	}
-	if recordType == "response_item" && rawString(payload["role"]) == "user" {
+	if prompt == "" && recordType == "response_item" && rawString(payload["role"]) == "user" {
 		var content []map[string]json.RawMessage
 		if json.Unmarshal(payload["content"], &content) == nil {
 			for _, block := range content {
 				if value := rawString(block["text"]); value != "" {
-					return value
+					prompt = value
+					break
 				}
 			}
 		}
 	}
-	return ""
+	if isCodexInternalPrompt(prompt) {
+		return ""
+	}
+	return prompt
+}
+
+func isCodexInternalPrompt(prompt string) bool {
+	trimmed := strings.TrimSpace(prompt)
+	for _, prefix := range []string{
+		"<recommended_plugins>",
+		"<environment_context>",
+		"# AGENTS.md instructions",
+	} {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func rawString(raw json.RawMessage) string {
