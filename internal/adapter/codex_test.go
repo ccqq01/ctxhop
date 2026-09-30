@@ -303,6 +303,43 @@ func TestCodexDiscoveryKeepsPaginatedChildRolloutIdentity(t *testing.T) {
 	}
 }
 
+func TestCodexReadSessionClampsStalePaginatedForkBoundary(t *testing.T) {
+	home := t.TempDir()
+	projectRoot := filepath.Join(t.TempDir(), "project")
+	parentID := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	childID := "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+	parentPath := filepath.Join(home, "sessions", "2026", "08", "19", "rollout-2026-08-19T10-20-30-"+parentID+".jsonl")
+	childPath := filepath.Join(home, "sessions", "2026", "08", "20", "rollout-2026-08-20T10-20-30-"+parentID+"_"+childID+".jsonl")
+	parentRecords := [][]byte{codexTestRecord(t, "2026-08-19T10:20:30Z", "session_meta", map[string]any{
+		"id": parentID, "cwd": projectRoot,
+	})}
+	childRecords := [][]byte{codexTestRecord(t, "2026-08-20T10:20:30Z", "session_meta", map[string]any{
+		"id": childID, "cwd": projectRoot, "forked_from_id": parentID, "forked_from_ordinal_exclusive": 9,
+	})}
+	if err := writeSessionAt(parentPath, parentRecords); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSessionAt(childPath, childRecords); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := (CodexLayout{Home: home}).ReadSession(SessionRef{NativeID: childID, localPath: childPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record codexRecord
+	if err := json.Unmarshal(data.Records[0], &record); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(record.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if got := int(payload["forked_from_ordinal_exclusive"].(float64)); got != 1 {
+		t.Fatalf("fork boundary = %d, want source record count 1", got)
+	}
+}
+
 func TestCodexDetectReadsRecordedVersionWithoutVersionGating(t *testing.T) {
 	home := t.TempDir()
 	id := "44444444-4444-4444-8444-444444444444"

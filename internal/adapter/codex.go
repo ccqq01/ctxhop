@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -234,7 +235,59 @@ func (l CodexLayout) ReadSession(ref SessionRef) (SessionData, error) {
 			return SessionData{}, err
 		}
 	}
-	return ReadSessionFile(path)
+	data, err := ReadSessionFile(path)
+	if err != nil {
+		return SessionData{}, err
+	}
+	data.Records = l.normalizePaginatedLineage(data.Records)
+	return data, nil
+}
+
+// normalizePaginatedLineage repairs a stale Codex fork boundary when the
+// source rollout has been compacted or truncated. Codex stores the source
+// ordinal in the child session_meta record; the App rejects the child when
+// that ordinal is beyond the source file currently available on disk.
+func (l CodexLayout) normalizePaginatedLineage(records [][]byte) [][]byte {
+	if len(records) == 0 {
+		return records
+	}
+	var envelope codexRecord
+	if json.Unmarshal(records[0], &envelope) != nil || envelope.Type != "session_meta" {
+		return records
+	}
+	var payload map[string]json.RawMessage
+	if json.Unmarshal(envelope.Payload, &payload) != nil {
+		return records
+	}
+	parentID := rawString(payload["forked_from_id"])
+	if parentID == "" {
+		return records
+	}
+	var cutoff int
+	if raw := payload["forked_from_ordinal_exclusive"]; len(raw) == 0 || json.Unmarshal(raw, &cutoff) != nil || cutoff <= 0 {
+		return records
+	}
+	parentPath, err := l.findSessionPath(parentID)
+	if err != nil || parentPath == "" {
+		return records
+	}
+	parent, err := ReadSessionFile(parentPath)
+	if err != nil || cutoff <= len(parent.Records) {
+		return records
+	}
+	payload["forked_from_ordinal_exclusive"] = json.RawMessage(strconv.Itoa(len(parent.Records)))
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return records
+	}
+	envelope.Payload = payloadBytes
+	repaired, err := json.Marshal(envelope)
+	if err != nil {
+		return records
+	}
+	out := append([][]byte(nil), records...)
+	out[0] = repaired
+	return out
 }
 
 // WriteSession installs a new Codex session without replacing an existing id.
