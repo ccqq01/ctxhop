@@ -340,6 +340,36 @@ func TestCodexReadSessionClampsStalePaginatedForkBoundary(t *testing.T) {
 	}
 }
 
+func TestCodexWriteSessionStripsForeignCustomProvider(t *testing.T) {
+	home := t.TempDir()
+	projectRoot := filepath.Join(t.TempDir(), "project")
+	id := "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	records := [][]byte{codexTestRecord(t, "2026-08-20T10:20:30Z", "session_meta", map[string]any{
+		"id": id, "cwd": projectRoot, "model_provider": "custom",
+		"thread_settings": map[string]any{"model_provider_id": "custom", "model": "gpt-6-luna"},
+	})}
+	layout := CodexLayout{Home: home}
+	if err := layout.WriteSession(projectRoot, id, records); err != nil {
+		t.Fatal(err)
+	}
+	data, err := layout.ReadSession(SessionRef{NativeID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value map[string]any
+	if err := json.Unmarshal(data.Records[0], &value); err != nil {
+		t.Fatal(err)
+	}
+	payload := value["payload"].(map[string]any)
+	if _, ok := payload["model_provider"]; ok {
+		t.Fatal("foreign model_provider was retained")
+	}
+	settings := payload["thread_settings"].(map[string]any)
+	if _, ok := settings["model_provider_id"]; ok {
+		t.Fatal("foreign model_provider_id was retained")
+	}
+}
+
 func TestCodexDetectReadsRecordedVersionWithoutVersionGating(t *testing.T) {
 	home := t.TempDir()
 	id := "44444444-4444-4444-8444-444444444444"

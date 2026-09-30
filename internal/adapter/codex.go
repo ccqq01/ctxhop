@@ -327,6 +327,7 @@ func (l CodexLayout) writeCodexSession(projectRoot, sessionID string, records []
 	if err := checkSessionID(sessionID); err != nil {
 		return err
 	}
+	records = stripUnsupportedCodexProvider(records)
 	if len(records) == 0 {
 		return errors.New("adapter: refusing to write a session with no records")
 	}
@@ -358,6 +359,53 @@ func (l CodexLayout) writeCodexSession(projectRoot, sessionID string, records []
 		return fmt.Errorf("write Codex session: %w", err)
 	}
 	return nil
+}
+
+// stripUnsupportedCodexProvider lets a restored session use the target
+// machine's configured provider. Session records may carry a provider id from
+// another machine; retaining an unavailable custom provider makes the Codex
+// App reject the entire conversation before it can be opened.
+func stripUnsupportedCodexProvider(records [][]byte) [][]byte {
+	out := append([][]byte(nil), records...)
+	for i, raw := range records {
+		var value any
+		if json.Unmarshal(raw, &value) != nil {
+			continue
+		}
+		if !stripCodexProviderValue(&value) {
+			continue
+		}
+		encoded, err := json.Marshal(value)
+		if err == nil {
+			out[i] = encoded
+		}
+	}
+	return out
+}
+
+func stripCodexProviderValue(value *any) bool {
+	changed := false
+	switch current := (*value).(type) {
+	case map[string]any:
+		for key, child := range current {
+			if (key == "model_provider" || key == "model_provider_id") && child == "custom" {
+				delete(current, key)
+				changed = true
+				continue
+			}
+			if stripCodexProviderValue(&child) {
+				current[key] = child
+				changed = true
+			}
+		}
+	case []any:
+		for i := range current {
+			if stripCodexProviderValue(&current[i]) {
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 
 func (l CodexLayout) findSessionPath(sessionID string) (string, error) {
