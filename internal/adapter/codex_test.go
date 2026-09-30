@@ -247,6 +247,62 @@ func TestCodexDiscoveryUsesFileModificationTimeForUpdatedSession(t *testing.T) {
 		t.Fatalf("updated = %s, want file modification time %s", refs[0].UpdatedAt, latest)
 	}
 }
+
+func TestCodexDiscoveryKeepsPaginatedChildRolloutIdentity(t *testing.T) {
+	home := t.TempDir()
+	projectRoot := filepath.Join(t.TempDir(), "project")
+	parentID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	childID := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	parentPath := filepath.Join(home, "sessions", "2026", "08", "19", "rollout-2026-08-19T10-20-30-"+parentID+".jsonl")
+	path := filepath.Join(home, "sessions", "2026", "08", "20", "rollout-2026-08-20T10-20-30-"+parentID+"_"+childID+".jsonl")
+	if err := writeSessionAt(parentPath, [][]byte{
+		codexTestRecord(t, "2026-08-19T10:20:30Z", "session_meta", map[string]any{
+			"id":   parentID,
+			"cwd":  projectRoot,
+			"type": "session_meta",
+		}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	records := [][]byte{
+		codexTestRecord(t, "2026-08-20T10:20:30Z", "session_meta", map[string]any{
+			"id":   parentID,
+			"cwd":  projectRoot,
+			"type": "session_meta",
+		}),
+		codexTestRecord(t, "2026-08-20T10:20:31Z", "event_msg", map[string]any{
+			"type":    "user_message",
+			"message": "continued paginated history",
+		}),
+		codexTestRecord(t, "2026-08-20T10:20:32Z", "response_item", map[string]any{
+			"history_base": map[string]string{"thread_id": parentID},
+		}),
+	}
+	if err := writeSessionAt(path, records); err != nil {
+		t.Fatal(err)
+	}
+
+	refs, err := (CodexLayout{Home: home}).DiscoverSessions(projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 2 {
+		t.Fatalf("refs = %+v, want parent and child rollouts", refs)
+	}
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		seen[ref.NativeID] = true
+	}
+	if !seen[parentID] || !seen[childID] {
+		t.Fatalf("refs = %+v, want parent %q and child %q", refs, parentID, childID)
+	}
+	for _, ref := range refs {
+		if _, err := (CodexLayout{Home: home}).ReadSession(ref); err != nil {
+			t.Fatalf("ReadSession(%s) error = %v", ref.NativeID, err)
+		}
+	}
+}
+
 func TestCodexDetectReadsRecordedVersionWithoutVersionGating(t *testing.T) {
 	home := t.TempDir()
 	id := "44444444-4444-4444-8444-444444444444"

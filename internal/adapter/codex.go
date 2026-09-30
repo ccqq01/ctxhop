@@ -173,7 +173,14 @@ func (l CodexLayout) DiscoverSessions(projectRoot string) ([]SessionRef, error) 
 		if !ok || summary.cwd == "" || !sameProject(summary.cwd, projectRoot) {
 			return nil
 		}
-		if summary.nativeID == "" {
+		// Codex paginated-history files can contain a parent thread id in
+		// session_meta while their filename ends in the child rollout id. The
+		// filename is the only reliable identity for that physical file; using
+		// the metadata id here would collapse the child into its parent and lose
+		// the lineage required by the Codex app when restoring it.
+		if fileID := codexFilenameSessionID(entry.Name()); fileID != "" {
+			summary.nativeID = fileID
+		} else if summary.nativeID == "" {
 			summary.nativeID = codexIDFromName(entry.Name())
 		}
 		if summary.nativeID == "" {
@@ -607,6 +614,9 @@ func codexIDFromName(name string) string {
 		return ""
 	}
 	value := strings.TrimSuffix(strings.TrimPrefix(name, "rollout-"), ".jsonl")
+	if candidate := codexFilenameSessionID(name); candidate != "" {
+		return candidate
+	}
 	candidate := value
 	if len(value) > 37 && value[len(value)-37] == '-' {
 		candidate = value[len(value)-36:]
@@ -617,4 +627,38 @@ func codexIDFromName(name string) string {
 		return ""
 	}
 	return candidate
+}
+
+// codexFilenameSessionID returns the UUID at the end of a rollout filename.
+// Paginated Codex history uses names such as parent_child.jsonl, while the
+// child file's session_meta can still identify the parent thread. The trailing
+// UUID therefore identifies the physical child rollout that must be preserved.
+func codexFilenameSessionID(name string) string {
+	if !isCodexSessionName(name) {
+		return ""
+	}
+	value := strings.TrimSuffix(strings.TrimPrefix(name, "rollout-"), ".jsonl")
+	if len(value) < 36 {
+		return ""
+	}
+	candidate := value[len(value)-36:]
+	if !isCodexUUID(candidate) {
+		return ""
+	}
+	return candidate
+}
+
+func isCodexUUID(value string) bool {
+	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		if !((value[i] >= '0' && value[i] <= '9') || (value[i] >= 'a' && value[i] <= 'f') || (value[i] >= 'A' && value[i] <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
