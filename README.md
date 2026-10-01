@@ -240,6 +240,14 @@ codex resume <SESSION_ID>
 claude --resume <SESSION_ID>
 ~~~
 
+For a paginated Codex conversation, find its logical Session ID with
+`ctxhop session list`, then run `ctxhop resume <LOGICAL_SESSION_ID> --agent codex`.
+This version of CtxHop pushes ancestor rollouts in the same project
+and restore the complete chain on the target. If an older upload lacks those
+ancestors, run `ctxhop push <NATIVE_SESSION_ID>` again on the source device
+with the updated CLI. Restore uses the target device's model provider and does
+not copy the source API key.
+
 ### Optional: Switch to another Agent
 
 Cross-Agent switching creates a new target-native Session and keeps the source

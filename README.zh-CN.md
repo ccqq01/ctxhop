@@ -224,6 +224,12 @@ codex resume <SESSION_ID>
 claude --resume <SESSION_ID>
 ```
 
+Codex 的分页会话请先用 `ctxhop session list` 查找逻辑 Session ID，再运行
+`ctxhop resume <LOGICAL_SESSION_ID> --agent codex`。新版 CtxHop 会在源设备
+`push` 时上传同项目中的上游历史，并在目标设备恢复整条历史链。若远端是旧版上传的
+不完整记录，先在源设备用新版 CtxHop 重新执行 `ctxhop push <原生SESSION_ID>`。
+恢复时使用目标设备的模型提供商配置，不复制源设备的 API Key。
+
 ### 可选：切换到另一个 Agent
 
 跨 Agent 切换会创建目标 Agent 的新 Session，源 Session 保持不变：

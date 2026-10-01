@@ -64,6 +64,9 @@ func (s *pushSummary) failContext(agent, stage string, err error) {
 	}
 
 	detail := fmt.Sprintf("push failure: stage=%s", stage)
+	if stage == "codex-lineage" {
+		detail = "push failure: Codex history is incomplete; open the source conversation in Codex, then retry 'ctxhop push'"
+	}
 	classText := ""
 	if pushFailureStageHasClass(stage) {
 		class := classifyPushFailure(err)
@@ -266,15 +269,25 @@ func collectPush(ctx context.Context, c *config.Config, configDir, projectDir st
 	}
 
 	var summary pushSummary
+	type agentPushSelection struct {
+		refs          []adapter.SessionRef
+		serialLineage bool
+		errors        []error
+	}
+	selections := make([]agentPushSelection, len(agents))
 	needsReplicaScope := false
-	for _, agent := range agents {
+	for index, agent := range agents {
 		refs := agent.Sessions
-		if options.session != "" {
+		if agent.Layout.Name() == "codex" {
+			var serial bool
+			refs, serial, selections[index].errors = prepareCodexPushRefs(agent.Layout, refs, options.session)
+			selections[index].serialLineage = serial
+		} else if options.session != "" {
 			refs = filterPushSession(refs, options.session)
 		}
+		selections[index].refs = refs
 		if len(refs) != 0 {
 			needsReplicaScope = true
-			break
 		}
 	}
 	if needsReplicaScope {
@@ -284,17 +297,21 @@ func collectPush(ctx context.Context, c *config.Config, configDir, projectDir st
 		}
 	}
 	found := false
-	for _, agent := range agents {
-		refs := agent.Sessions
-		if options.session != "" {
-			refs = filterPushSession(refs, options.session)
+	for index, agent := range agents {
+		selection := selections[index]
+		for _, err := range selection.errors {
+			summary.failContext(agent.Layout.Name(), "codex-lineage", err)
+			if options.session == "" || len(filterPushSession(agent.Sessions, options.session)) != 0 {
+				found = true
+			}
 		}
+		refs := selection.refs
 		if len(refs) == 0 {
 			continue
 		}
 		found = true
 		space := adapter.PathSpace{ProjectRoot: current.Root, AgentHome: agent.Installation.DataDir}
-		partial := pushDiscoveredSessionsWithOptions(ctx, c.Device.ID, secrets.IdentifierKey, projectID, current.Identity.Value, agent.Layout, agent.Installation, space, store, public, pusher, configDir, current.Root, refs, pushSessionOptions{includeWorkspace: options.workspace, includeDirectoryWorkspace: options.workspace && !current.GitBacked, includeGitTransfer: options.workspace, gitStash: options.gitStash, skipConfig: !c.SyncConfigEnabled(), replicaIdentities: access.Identities, hubName: hubName})
+		partial := pushDiscoveredSessionsWithOptions(ctx, c.Device.ID, secrets.IdentifierKey, projectID, current.Identity.Value, agent.Layout, agent.Installation, space, store, public, pusher, configDir, current.Root, refs, pushSessionOptions{includeWorkspace: options.workspace, includeDirectoryWorkspace: options.workspace && !current.GitBacked, includeGitTransfer: options.workspace, gitStash: options.gitStash, skipConfig: !c.SyncConfigEnabled(), replicaIdentities: access.Identities, hubName: hubName, serialLineage: selection.serialLineage})
 		summary.Pushed += partial.Pushed
 		summary.Failed += partial.Failed
 		summary.Skipped += partial.Skipped
@@ -355,6 +372,7 @@ type pushSessionOptions struct {
 	projectIdentity           string
 	hubName                   string
 	replicaIdentities         []*ecdh.PrivateKey
+	serialLineage             bool
 }
 
 type pushedNativeSession struct {
@@ -411,6 +429,9 @@ func pushDiscoveredSessionsWithOptions(ctx context.Context, deviceID string, ide
 	}
 
 	workerCount := maxPushSessionWorkers
+	if options.serialLineage {
+		workerCount = 1
+	}
 	if len(refs) < workerCount {
 		workerCount = len(refs)
 	}
@@ -425,10 +446,19 @@ func pushDiscoveredSessionsWithOptions(ctx context.Context, deviceID string, ide
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
+			failedLineage := false
 			for index := range jobs {
+				if failedLineage {
+					results <- result{index: index, summary: pushSummary{Skipped: 1}}
+					continue
+				}
+				partial := pushOneDiscoveredSession(ctx, deviceID, identifierKey, projectID, layout, installation, space, store, public, pusher, stateRoot, projectRoot, refs[index], options)
+				if options.serialLineage && partial.Failed != 0 {
+					failedLineage = true
+				}
 				results <- result{
 					index:   index,
-					summary: pushOneDiscoveredSession(ctx, deviceID, identifierKey, projectID, layout, installation, space, store, public, pusher, stateRoot, projectRoot, refs[index], options),
+					summary: partial,
 				}
 			}
 		}()

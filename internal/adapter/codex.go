@@ -243,6 +243,27 @@ func (l CodexLayout) ReadSession(ref SessionRef) (SessionData, error) {
 	return data, nil
 }
 
+// ReadStoredSession returns the exact records on disk. History byte cutoffs
+// must be calculated from these bytes, not from ReadSession's compatibility
+// normalization or from a pre-write restore plan.
+func (l CodexLayout) ReadStoredSession(nativeID string) ([][]byte, error) {
+	path, err := l.findSessionPath(nativeID)
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, os.ErrNotExist
+	}
+	data, err := ReadSessionFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if data.DroppedTail {
+		return nil, fmt.Errorf("%w: installed Codex history has an incomplete final record", ErrCorruptSession)
+	}
+	return data.Records, nil
+}
+
 // normalizePaginatedLineage repairs a stale Codex fork boundary when the
 // source rollout has been compacted or truncated. Codex stores the source
 // ordinal in the child session_meta record; the App rejects the child when
@@ -362,50 +383,67 @@ func (l CodexLayout) writeCodexSession(projectRoot, sessionID string, records []
 }
 
 // stripUnsupportedCodexProvider lets a restored session use the target
-// machine's configured provider. Session records may carry a provider id from
-// another machine; retaining an unavailable custom provider makes the Codex
-// App reject the entire conversation before it can be opened.
+// machine's configured provider. Only Codex's own session and thread-settings
+// selectors are removed; arbitrary user and tool data must remain untouched.
 func stripUnsupportedCodexProvider(records [][]byte) [][]byte {
 	out := append([][]byte(nil), records...)
 	for i, raw := range records {
-		var value any
-		if json.Unmarshal(raw, &value) != nil {
+		var envelope map[string]json.RawMessage
+		if json.Unmarshal(raw, &envelope) != nil {
 			continue
 		}
-		if !stripCodexProviderValue(&value) {
+		var recordType string
+		if json.Unmarshal(envelope["type"], &recordType) != nil || (recordType != "session_meta" && recordType != "event_msg") {
 			continue
 		}
-		encoded, err := json.Marshal(value)
-		if err == nil {
-			out[i] = encoded
+		var payload map[string]json.RawMessage
+		if json.Unmarshal(envelope["payload"], &payload) != nil {
+			continue
+		}
+		if recordType == "event_msg" {
+			var eventType string
+			if json.Unmarshal(payload["type"], &eventType) != nil || !strings.HasPrefix(eventType, "thread_settings_") {
+				continue
+			}
+		}
+		changed := false
+		if recordType == "session_meta" {
+			for _, field := range []string{"model_provider", "model_provider_id"} {
+				if _, exists := payload[field]; exists {
+					delete(payload, field)
+					changed = true
+				}
+			}
+		}
+		if settingsRaw, exists := payload["thread_settings"]; exists {
+			var settings map[string]json.RawMessage
+			if json.Unmarshal(settingsRaw, &settings) == nil {
+				for _, field := range []string{"model_provider", "model_provider_id"} {
+					if _, exists := settings[field]; exists {
+						delete(settings, field)
+						changed = true
+					}
+				}
+				if changed {
+					if encoded, err := json.Marshal(settings); err == nil {
+						payload["thread_settings"] = encoded
+					}
+				}
+			}
+		}
+		if !changed {
+			continue
+		}
+		encodedPayload, err := json.Marshal(payload)
+		if err != nil {
+			continue
+		}
+		envelope["payload"] = encodedPayload
+		if encodedRecord, err := json.Marshal(envelope); err == nil {
+			out[i] = encodedRecord
 		}
 	}
 	return out
-}
-
-func stripCodexProviderValue(value *any) bool {
-	changed := false
-	switch current := (*value).(type) {
-	case map[string]any:
-		for key, child := range current {
-			if (key == "model_provider" || key == "model_provider_id") && child == "custom" {
-				delete(current, key)
-				changed = true
-				continue
-			}
-			if stripCodexProviderValue(&child) {
-				current[key] = child
-				changed = true
-			}
-		}
-	case []any:
-		for i := range current {
-			if stripCodexProviderValue(&current[i]) {
-				changed = true
-			}
-		}
-	}
-	return changed
 }
 
 func (l CodexLayout) findSessionPath(sessionID string) (string, error) {

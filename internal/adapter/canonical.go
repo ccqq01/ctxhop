@@ -114,6 +114,18 @@ func (c *Canonicalizer) Record(raw []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A Codex history byte cutoff refers to a physical parent rollout. Path
+	// localization changes that file's length, so only the ordinal cutoff is
+	// stable across devices. Restore fills in the destination byte cutoff.
+	if record, ok := v.(map[string]any); ok && record["type"] == "session_meta" {
+		if payload, ok := record["payload"].(map[string]any); ok {
+			if base, ok := payload["history_base"].(map[string]any); ok {
+				if _, exists := base["end_byte_offset"]; exists {
+					base["end_byte_offset"] = json.Number("0")
+				}
+			}
+		}
+	}
 	return encode(c.walk("", v))
 }
 

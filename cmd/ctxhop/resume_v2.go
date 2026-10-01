@@ -25,6 +25,7 @@ import (
 type resumeSelection struct {
 	Candidate         resumeCandidate
 	Plan              syncflow.RestorePlan
+	Dependencies      []nativeResumeDependency
 	Agent             adapter.AgentSessions
 	HubID             string
 	HubName           string
@@ -160,6 +161,13 @@ func selectNativeResume(ctx context.Context, configDir string, current project.P
 	if err != nil {
 		return resumeSelection{}, safeResumePlanError(err)
 	}
+	var dependencies []nativeResumeDependency
+	if candidate.Replica.Descriptor.Source.Agent == "codex" {
+		dependencies, err = planCodexResumeLineage(ctx, v2Groups, candidate.NativeID, candidate.Replica.Layout.DeviceID(), plan, access, space, selectedAgent.Installation, options.allowLimited)
+		if err != nil {
+			return resumeSelection{}, err
+		}
+	}
 	sessionDescriptor := sessionhub.SessionDescriptor{
 		Version:   sessionhub.ModelVersion,
 		SessionID: candidate.Group.SessionID,
@@ -193,6 +201,7 @@ func selectNativeResume(ctx context.Context, configDir string, current project.P
 	return resumeSelection{
 		Candidate:         resumeCandidate{Group: compatibilityGroup, Summary: candidate.Summary},
 		Plan:              plan,
+		Dependencies:      dependencies,
 		Agent:             selectedAgent,
 		HubID:             hubScope.ID,
 		HubName:           hubName,

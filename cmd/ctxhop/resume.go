@@ -40,31 +40,32 @@ type resumeOptions struct {
 }
 
 type resumeReport struct {
-	Preview         bool                      `json:"preview,omitempty"`
-	Session         string                    `json:"session"`
-	LogicalSession  string                    `json:"logicalSession,omitempty"`
-	Agent           string                    `json:"agent,omitempty"`
-	ReplicaID       string                    `json:"replicaId,omitempty"`
-	LocalState      string                    `json:"localState,omitempty"`
-	RemoteRecords   uint64                    `json:"remoteRecordCount,omitempty"`
-	LocalRecords    uint64                    `json:"localRecordCount,omitempty"`
-	AppendRecords   uint64                    `json:"appendRecordCount,omitempty"`
-	Title           string                    `json:"title"`
-	Workspace       string                    `json:"workspace"`
-	Differences     int                       `json:"differences"`
-	Replaced        bool                      `json:"replaced"`
-	Merged          bool                      `json:"merged"`
-	ContextInjected bool                      `json:"contextInjected"`
-	Sources         []string                  `json:"sources"`
-	OmittedAgents   []string                  `json:"omittedAgents,omitempty"`
-	OmittedReplicas []string                  `json:"omittedReplicas,omitempty"`
-	SelectedHeads   []string                  `json:"selectedHeads,omitempty"`
-	OmittedHeads    []string                  `json:"omittedHeads,omitempty"`
-	IncludedByAgent map[string]uint64         `json:"includedContributionsByAgent,omitempty"`
-	OmittedByAgent  map[string]uint64         `json:"omittedContributionsByAgent,omitempty"`
-	UnreadableHeads []string                  `json:"unreadableHeads,omitempty"`
-	Environment     *environmentPreviewReport `json:"environment,omitempty"`
-	WorkspaceState  *projectStateReport       `json:"workspaceState,omitempty"`
+	Preview             bool                      `json:"preview,omitempty"`
+	Session             string                    `json:"session"`
+	LogicalSession      string                    `json:"logicalSession,omitempty"`
+	Agent               string                    `json:"agent,omitempty"`
+	ReplicaID           string                    `json:"replicaId,omitempty"`
+	LocalState          string                    `json:"localState,omitempty"`
+	RemoteRecords       uint64                    `json:"remoteRecordCount,omitempty"`
+	LocalRecords        uint64                    `json:"localRecordCount,omitempty"`
+	AppendRecords       uint64                    `json:"appendRecordCount,omitempty"`
+	Title               string                    `json:"title"`
+	Workspace           string                    `json:"workspace"`
+	Differences         int                       `json:"differences"`
+	Replaced            bool                      `json:"replaced"`
+	Merged              bool                      `json:"merged"`
+	ContextInjected     bool                      `json:"contextInjected"`
+	Sources             []string                  `json:"sources"`
+	OmittedAgents       []string                  `json:"omittedAgents,omitempty"`
+	OmittedReplicas     []string                  `json:"omittedReplicas,omitempty"`
+	SelectedHeads       []string                  `json:"selectedHeads,omitempty"`
+	OmittedHeads        []string                  `json:"omittedHeads,omitempty"`
+	IncludedByAgent     map[string]uint64         `json:"includedContributionsByAgent,omitempty"`
+	OmittedByAgent      map[string]uint64         `json:"omittedContributionsByAgent,omitempty"`
+	UnreadableHeads     []string                  `json:"unreadableHeads,omitempty"`
+	LineageDependencies []string                  `json:"lineageDependencies,omitempty"`
+	Environment         *environmentPreviewReport `json:"environment,omitempty"`
+	WorkspaceState      *projectStateReport       `json:"workspaceState,omitempty"`
 }
 
 type resumeCandidate struct {
@@ -382,24 +383,25 @@ func collectResumeWithPromptMode(ctx context.Context, c *config.Config, configDi
 	}
 
 	baseReport := resumeReport{
-		Preview:         options.preview,
-		Session:         candidate.Summary.NativeID,
-		LogicalSession:  selection.LogicalSession,
-		Agent:           selection.AgentName,
-		ReplicaID:       selection.ReplicaID,
-		LocalState:      selection.LocalState.State,
-		RemoteRecords:   selection.LocalState.RemoteRecords,
-		LocalRecords:    selection.LocalState.LocalRecords,
-		AppendRecords:   selection.LocalState.AppendRecords,
-		Title:           safeListText(candidate.Summary.Title),
-		Environment:     environmentReport,
-		OmittedAgents:   append([]string(nil), selection.OmittedAgents...),
-		OmittedReplicas: append([]string(nil), selection.OmittedReplicas...),
-		SelectedHeads:   append([]string(nil), selection.SelectedHeads...),
-		OmittedHeads:    append([]string(nil), selection.OmittedHeads...),
-		IncludedByAgent: cloneResumeCounts(selection.IncludedByAgent),
-		OmittedByAgent:  cloneResumeCounts(selection.OmittedByAgent),
-		UnreadableHeads: append([]string(nil), selection.UnreadableHeads...),
+		Preview:             options.preview,
+		Session:             candidate.Summary.NativeID,
+		LogicalSession:      selection.LogicalSession,
+		Agent:               selection.AgentName,
+		ReplicaID:           selection.ReplicaID,
+		LocalState:          selection.LocalState.State,
+		RemoteRecords:       selection.LocalState.RemoteRecords,
+		LocalRecords:        selection.LocalState.LocalRecords,
+		AppendRecords:       selection.LocalState.AppendRecords,
+		Title:               safeListText(candidate.Summary.Title),
+		Environment:         environmentReport,
+		OmittedAgents:       append([]string(nil), selection.OmittedAgents...),
+		OmittedReplicas:     append([]string(nil), selection.OmittedReplicas...),
+		SelectedHeads:       append([]string(nil), selection.SelectedHeads...),
+		OmittedHeads:        append([]string(nil), selection.OmittedHeads...),
+		IncludedByAgent:     cloneResumeCounts(selection.IncludedByAgent),
+		OmittedByAgent:      cloneResumeCounts(selection.OmittedByAgent),
+		UnreadableHeads:     append([]string(nil), selection.UnreadableHeads...),
+		LineageDependencies: nativeResumeDependencyIDs(selection.Dependencies),
 	}
 	if workspaceInspection != nil {
 		baseReport.WorkspaceState = &workspaceInspection.Report
@@ -419,6 +421,21 @@ func collectResumeWithPromptMode(ctx context.Context, c *config.Config, configDi
 		return baseReport, nil
 	}
 
+	if len(selection.Dependencies) != 0 {
+		if fingerprint != nil && !options.allowDivergent {
+			workspaceReport, compareErr := project.Compare(ctx, current.Root, *fingerprint)
+			if compareErr != nil {
+				return resumeReport{}, fmt.Errorf("resume: preflight workspace before Codex history restore: %w", compareErr)
+			}
+			if workspaceReport.Verdict == project.Divergent {
+				return resumeReport{}, fmt.Errorf("resume: %w: workspace verdict is divergent", syncflow.ErrWorkspaceDiverged)
+			}
+		}
+		plan, err = applyCodexResumeLineage(ctx, selection, current.Root, options)
+		if err != nil {
+			return resumeReport{}, err
+		}
+	}
 	result, err := syncflow.ApplyRestore(ctx, layout, current.Root, candidate.Summary.NativeID, plan, syncflow.RestoreApplyOptions{
 		Fingerprint:            fingerprint,
 		AllowLimited:           options.allowLimited,
@@ -740,6 +757,11 @@ func writeResumeText(w io.Writer, report resumeReport) error {
 			}
 		}
 		if _, err := fmt.Fprintln(w); err != nil {
+			return err
+		}
+	}
+	if len(report.LineageDependencies) != 0 {
+		if _, err := fmt.Fprintf(w, "history dependencies: %s\n", safeListText(strings.Join(report.LineageDependencies, ","))); err != nil {
 			return err
 		}
 	}
