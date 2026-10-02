@@ -416,7 +416,7 @@ func stripUnsupportedCodexProvider(records [][]byte) [][]byte {
 		changed := false
 		if recordType == "session_meta" {
 			for _, field := range []string{"model_provider", "model_provider_id"} {
-				if _, exists := payload[field]; exists {
+				if value, exists := payload[field]; exists && !isBuiltinCodexProvider(value) {
 					delete(payload, field)
 					changed = true
 				}
@@ -426,7 +426,7 @@ func stripUnsupportedCodexProvider(records [][]byte) [][]byte {
 			var settings map[string]json.RawMessage
 			if json.Unmarshal(settingsRaw, &settings) == nil {
 				for _, field := range []string{"model_provider", "model_provider_id"} {
-					if _, exists := settings[field]; exists {
+					if value, exists := settings[field]; exists && !isBuiltinCodexProvider(value) {
 						delete(settings, field)
 						changed = true
 					}
@@ -451,6 +451,11 @@ func stripUnsupportedCodexProvider(records [][]byte) [][]byte {
 		}
 	}
 	return out
+}
+
+func isBuiltinCodexProvider(value json.RawMessage) bool {
+	var name string
+	return json.Unmarshal(value, &name) == nil && name == "openai"
 }
 
 func (l CodexLayout) findSessionPath(sessionID string) (string, error) {

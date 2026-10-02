@@ -324,7 +324,10 @@ func TestCollectResumeRoundTripsCodexContinuationBackToOriginalDevice(t *testing
 	layoutA := adapter.CodexLayout{Home: homeA}
 	initial := [][]byte{
 		codexRoundTripRecord(t, "2026-08-25T10:00:00Z", "session_meta", map[string]any{
-			"id": nativeID, "cwd": projectA, "cli_version": "0.149.0",
+			"id": nativeID, "cwd": projectA, "cli_version": "0.149.0", "model_provider": "openai",
+		}),
+		codexRoundTripRecord(t, "2026-08-25T10:00:30Z", "event_msg", map[string]any{
+			"type": "thread_settings_applied", "thread_settings": map[string]any{"model_provider_id": "openai"},
 		}),
 		codexRoundTripRecord(t, "2026-08-25T10:01:00Z", "event_msg", map[string]any{"text": "from-a"}),
 	}
