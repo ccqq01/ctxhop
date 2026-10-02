@@ -227,6 +227,14 @@ func (s SessionDescriptor) Validate() error {
 	if err := validateText(s.Title, maxTitleLength, false); err != nil {
 		return fmt.Errorf("%w: session title", err)
 	}
+	if err := validateText(s.TitleSource, maxNameLength, false); err != nil {
+		return fmt.Errorf("%w: session title source", err)
+	}
+	if !s.TitleUpdatedAt.IsZero() {
+		if err := validateTime(s.TitleUpdatedAt); err != nil {
+			return fmt.Errorf("%w: session title timestamp", err)
+		}
+	}
 	if err := validateTime(s.CreatedAt); err != nil {
 		return fmt.Errorf("%w: session timestamp", err)
 	}

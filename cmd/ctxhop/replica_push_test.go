@@ -36,10 +36,12 @@ func TestPublishNativeReplicaCreatesSourceNativeV2View(t *testing.T) {
 	}
 	createdAt := time.Date(2026, 8, 27, 9, 0, 0, 0, time.UTC)
 	ref := adapter.SessionRef{
-		Agent:     "codex",
-		NativeID:  "native-one",
-		Title:     "cross agent context",
-		CreatedAt: createdAt,
+		Agent:          "codex",
+		NativeID:       "native-one",
+		Title:          "旧名称",
+		TitleSource:    "codex-app",
+		TitleUpdatedAt: createdAt.Add(time.Hour),
+		CreatedAt:      createdAt,
 	}
 	space := adapter.PathSpace{ProjectRoot: projectRoot, AgentHome: home}
 	data := adapter.SessionData{Records: [][]byte{[]byte(`{"type":"user","cwd":"` + filepath.ToSlash(projectRoot) + `","message":{"role":"user","content":"hello"}}`)}}
@@ -54,7 +56,10 @@ func TestPublishNativeReplicaCreatesSourceNativeV2View(t *testing.T) {
 	// A second invocation resumes the local cursor and republishes only the
 	// mutable tip; no private content identity is required for this legacy
 	// domain retry.
-	if err := publishNativeReplica(context.Background(), configDir, "deviceone", identifierKey, "manual:app", layout, installation, store, public, configDir, ref, "legacyone", data, space, nil); err != nil {
+	renamed := ref
+	renamed.Title = "简历"
+	renamed.TitleUpdatedAt = createdAt.Add(2 * time.Hour)
+	if err := publishNativeReplica(context.Background(), configDir, "deviceone", identifierKey, "manual:app", layout, installation, store, public, configDir, renamed, "legacyone", data, space, nil); err != nil {
 		t.Fatalf("idempotent publishNativeReplica: %v", err)
 	}
 
@@ -85,7 +90,7 @@ func TestPublishNativeReplicaCreatesSourceNativeV2View(t *testing.T) {
 	if len(metadata) != 1 || metadata[0].SessionID != sessionKey || len(metadata[0].Replicas) != 1 {
 		t.Fatalf("project Replica metadata = %+v, want one logical Session", metadata)
 	}
-	if metadata[0].SessionDescriptor == nil || metadata[0].SessionDescriptor.Title != ref.Title {
+	if metadata[0].SessionDescriptor == nil || metadata[0].SessionDescriptor.Title != renamed.Title || metadata[0].SessionDescriptor.TitleSource != "codex-app" || !metadata[0].SessionDescriptor.TitleUpdatedAt.Equal(renamed.TitleUpdatedAt) {
 		t.Fatalf("logical Session descriptor = %+v", metadata[0].SessionDescriptor)
 	}
 	replica := metadata[0].Replicas[0]

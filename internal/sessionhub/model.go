@@ -87,13 +87,19 @@ type ProjectDescriptor struct {
 // SessionDescriptor is the logical, cross-Agent session metadata. Native
 // records are never stored in this descriptor.
 type SessionDescriptor struct {
-	Version   int              `json:"version"`
-	SessionID string           `json:"sessionId"`
-	ProjectID string           `json:"projectId"`
-	Title     string           `json:"title"`
-	CreatedAt time.Time        `json:"createdAt"`
-	CreatedBy SessionCreator   `json:"createdBy"`
-	Lifecycle SessionLifecycle `json:"lifecycle"`
+	Version   int    `json:"version"`
+	SessionID string `json:"sessionId"`
+	ProjectID string `json:"projectId"`
+	Title     string `json:"title"`
+	// TitleSource identifies an explicitly named Agent conversation. Empty
+	// preserves the legacy content-derived title behavior.
+	TitleSource string `json:"titleSource,omitempty"`
+	// TitleUpdatedAt is display-only metadata for resolving names published
+	// from multiple devices. It never orders session content.
+	TitleUpdatedAt time.Time        `json:"titleUpdatedAt,omitempty"`
+	CreatedAt      time.Time        `json:"createdAt"`
+	CreatedBy      SessionCreator   `json:"createdBy"`
+	Lifecycle      SessionLifecycle `json:"lifecycle"`
 }
 
 // NativeSource identifies the Agent-native session represented by a Replica.

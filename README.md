@@ -272,6 +272,7 @@ Agent configuration is filtered before synchronization.
 | Data | Scope |
 |---|---|
 | Session context | Synchronized by default. Stored as encrypted Agent session records. |
+| Session title | An explicitly named Codex App chat uses its App name in encrypted metadata; otherwise CtxHop derives a title from the conversation. |
 | Project identity and Git summary | Synchronized by default. Used to match the same project across devices. |
 | Agent environment | Filtered components selected during `init`, such as Skills, MCP intents, and allowed Session settings. |
 | Workspace and Git state | Optional. Included only with `push --workspace` and `resume --workspace`. |
@@ -279,6 +280,8 @@ Agent configuration is filtered before synchronization.
 
 Project files and complete Git repositories are outside the default
 synchronization scope.
+Both devices should run a CtxHop version that understands Codex App title metadata
+when sharing these names across devices.
 
 ## CLI
 

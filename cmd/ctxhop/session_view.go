@@ -35,13 +35,15 @@ type sessionProjectScope struct {
 }
 
 type sessionListEntry struct {
-	SessionID   string               `json:"sessionId"`
-	Title       string               `json:"title"`
-	CreatedAt   time.Time            `json:"createdAt,omitempty"`
-	UpdatedAt   time.Time            `json:"updatedAt,omitempty"`
-	Local       bool                 `json:"local"`
-	RecordCount uint64               `json:"recordCount,omitempty"`
-	Sources     []sessionSourceEntry `json:"sources"`
+	SessionID      string               `json:"sessionId"`
+	Title          string               `json:"title"`
+	CreatedAt      time.Time            `json:"createdAt,omitempty"`
+	UpdatedAt      time.Time            `json:"updatedAt,omitempty"`
+	Local          bool                 `json:"local"`
+	RecordCount    uint64               `json:"recordCount,omitempty"`
+	Sources        []sessionSourceEntry `json:"sources"`
+	titleSource    string
+	titleUpdatedAt time.Time
 }
 
 type sessionSourceEntry struct {
@@ -347,6 +349,7 @@ func (b *sessionProjectionBuilder) addRegisteredSessions() {
 	for _, record := range projectRecord.Sessions {
 		entry := b.entry(record.Descriptor.SessionID)
 		entry.Title = safeListText(record.Descriptor.Title)
+		b.addPreferredTitle(record.Descriptor.SessionID, record.Descriptor.Title, record.Descriptor.TitleSource, record.Descriptor.TitleUpdatedAt)
 		entry.CreatedAt = record.Descriptor.CreatedAt.UTC()
 		for _, source := range record.Sources {
 			nativeKey, _ := sessionhub.DeriveNativeSessionKey(b.identifierKey, source.Agent, source.NativeSessionID)
@@ -363,6 +366,9 @@ func (b *sessionProjectionBuilder) addRegisteredSessions() {
 }
 
 func (b *sessionProjectionBuilder) addRemoteReplicas(group syncer.ProjectReplicaMetadataRef) {
+	if group.SessionDescriptor != nil {
+		b.addPreferredTitle(group.SessionDescriptor.SessionID, group.SessionDescriptor.Title, group.SessionDescriptor.TitleSource, group.SessionDescriptor.TitleUpdatedAt)
+	}
 	if len(group.Replicas) == 0 && group.SessionDescriptor != nil {
 		b.addSourceTitle(group.SessionDescriptor.SessionID, group.SessionDescriptor.Title, group.SessionDescriptor.CreatedAt)
 		entry := b.entry(group.SessionDescriptor.SessionID)
@@ -443,6 +449,7 @@ func (b *sessionProjectionBuilder) addLocal(ref adapter.SessionRef) {
 		local:     true,
 	}
 	b.addSource(sessionID, source)
+	b.addPreferredTitle(sessionID, ref.Title, ref.TitleSource, ref.TitleUpdatedAt)
 }
 
 func (b *sessionProjectionBuilder) sessionID(legacyID, agent, nativeID string) string {
@@ -582,6 +589,22 @@ func (b *sessionProjectionBuilder) addSourceTitle(sessionID, title string, creat
 	}
 	if !createdAt.IsZero() && (entry.CreatedAt.IsZero() || createdAt.Before(entry.CreatedAt)) {
 		entry.CreatedAt = createdAt.UTC()
+	}
+}
+
+func (b *sessionProjectionBuilder) addPreferredTitle(sessionID, title, source string, updatedAt time.Time) {
+	if sessionID == "" || source != "codex-app" {
+		return
+	}
+	title = safeListText(title)
+	if title == "" {
+		return
+	}
+	entry := b.entry(sessionID)
+	if entry.titleSource != "codex-app" || updatedAt.After(entry.titleUpdatedAt) {
+		entry.Title = title
+		entry.titleSource = source
+		entry.titleUpdatedAt = updatedAt
 	}
 }
 

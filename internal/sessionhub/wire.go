@@ -34,13 +34,15 @@ type sessionCreatorWire struct {
 }
 
 type sessionWire struct {
-	Version   int                `json:"version"`
-	SessionID string             `json:"sessionId"`
-	ProjectID string             `json:"projectId"`
-	Title     string             `json:"title"`
-	CreatedAt string             `json:"createdAt"`
-	CreatedBy sessionCreatorWire `json:"createdBy"`
-	Lifecycle SessionLifecycle   `json:"lifecycle"`
+	Version        int                `json:"version"`
+	SessionID      string             `json:"sessionId"`
+	ProjectID      string             `json:"projectId"`
+	Title          string             `json:"title"`
+	TitleSource    string             `json:"titleSource,omitempty"`
+	TitleUpdatedAt string             `json:"titleUpdatedAt,omitempty"`
+	CreatedAt      string             `json:"createdAt"`
+	CreatedBy      sessionCreatorWire `json:"createdBy"`
+	Lifecycle      SessionLifecycle   `json:"lifecycle"`
 }
 
 type replicaWire struct {
@@ -176,12 +178,18 @@ func (s SessionDescriptor) MarshalBinary() ([]byte, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
+	var titleUpdatedAt string
+	if !s.TitleUpdatedAt.IsZero() {
+		titleUpdatedAt = formatTime(s.TitleUpdatedAt)
+	}
 	return marshalCompact(sessionWire{
-		Version:   s.Version,
-		SessionID: s.SessionID,
-		ProjectID: s.ProjectID,
-		Title:     s.Title,
-		CreatedAt: formatTime(s.CreatedAt),
+		Version:        s.Version,
+		SessionID:      s.SessionID,
+		ProjectID:      s.ProjectID,
+		Title:          s.Title,
+		TitleSource:    s.TitleSource,
+		TitleUpdatedAt: titleUpdatedAt,
+		CreatedAt:      formatTime(s.CreatedAt),
 		CreatedBy: sessionCreatorWire{
 			Agent:    s.CreatedBy.Agent,
 			DeviceID: s.CreatedBy.DeviceID,
@@ -200,12 +208,21 @@ func ParseSessionDescriptor(data []byte) (SessionDescriptor, error) {
 	if err != nil {
 		return SessionDescriptor{}, fmt.Errorf("%w: session timestamp", ErrInvalidEnvelope)
 	}
+	var titleUpdatedAt time.Time
+	if wire.TitleUpdatedAt != "" {
+		titleUpdatedAt, err = parseTime(wire.TitleUpdatedAt)
+		if err != nil {
+			return SessionDescriptor{}, fmt.Errorf("%w: session title timestamp", ErrInvalidEnvelope)
+		}
+	}
 	session := SessionDescriptor{
-		Version:   wire.Version,
-		SessionID: wire.SessionID,
-		ProjectID: wire.ProjectID,
-		Title:     wire.Title,
-		CreatedAt: createdAt,
+		Version:        wire.Version,
+		SessionID:      wire.SessionID,
+		ProjectID:      wire.ProjectID,
+		Title:          wire.Title,
+		TitleSource:    wire.TitleSource,
+		TitleUpdatedAt: titleUpdatedAt,
+		CreatedAt:      createdAt,
 		CreatedBy: SessionCreator{
 			Agent:    wire.CreatedBy.Agent,
 			DeviceID: wire.CreatedBy.DeviceID,

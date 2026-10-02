@@ -212,6 +212,13 @@ func (l CodexLayout) DiscoverSessions(projectRoot string) ([]SessionRef, error) 
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
+	for id, indexed := range l.indexedThreadNames(refsByID) {
+		ref := refsByID[id]
+		ref.Title = indexed.title
+		ref.TitleSource = "codex-app"
+		ref.TitleUpdatedAt = indexed.updatedAt
+		refsByID[id] = ref
+	}
 	refs := make([]SessionRef, 0, len(refsByID))
 	for _, ref := range refsByID {
 		refs = append(refs, ref)

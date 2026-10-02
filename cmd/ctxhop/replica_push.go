@@ -153,13 +153,15 @@ func publishNativeReplicaInHubResult(ctx context.Context, configDir, deviceID st
 	}
 	now := time.Now().UTC()
 	sessionDescriptor := sessionhub.SessionDescriptor{
-		Version:   sessionhub.ModelVersion,
-		SessionID: sessionKey,
-		ProjectID: projectKey,
-		Title:     safeListText(ref.Title),
-		CreatedAt: createdAt.UTC().Round(0),
-		CreatedBy: sessionhub.SessionCreator{Agent: agent, DeviceID: deviceID},
-		Lifecycle: sessionhub.SessionActive,
+		Version:        sessionhub.ModelVersion,
+		SessionID:      sessionKey,
+		ProjectID:      projectKey,
+		Title:          safeListText(ref.Title),
+		TitleSource:    ref.TitleSource,
+		TitleUpdatedAt: ref.TitleUpdatedAt,
+		CreatedAt:      createdAt.UTC().Round(0),
+		CreatedBy:      sessionhub.SessionCreator{Agent: agent, DeviceID: deviceID},
+		Lifecycle:      sessionhub.SessionActive,
 	}
 	replicaOrigin := sessionhub.ReplicaOrigin{Kind: sessionhub.ReplicaOriginNative}
 	if localBinding != nil && localBinding.Origin.Kind != sessionhub.ReplicaOriginLocalMaterialize {

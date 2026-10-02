@@ -96,6 +96,13 @@ type SessionRef struct {
 	// content-derived and therefore encrypted before it ever leaves the machine.
 	Title string
 
+	// TitleSource is "codex-app" when Title came from the Codex App's explicit
+	// thread-name index. Empty means Title is the normal content-derived fallback.
+	TitleSource string
+	// TitleUpdatedAt is the App name change time. It is display metadata only;
+	// session ordering and sync resolution never depend on this clock.
+	TitleUpdatedAt time.Time
+
 	// CreatedAt and UpdatedAt come from the agent's own records where
 	// available, falling back to file timestamps.
 	CreatedAt time.Time

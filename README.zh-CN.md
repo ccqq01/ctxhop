@@ -253,12 +253,14 @@ Agent 配置会在同步前经过筛选。
 | 内容 | 范围 |
 |---|---|
 | Session 上下文 | 默认同步，以加密的 Agent Session 记录保存。 |
+| Session 标题 | Codex App 中明确设置的对话名称会进入加密元数据；没有名称时使用对话内容生成的标题。 |
 | 项目识别信息与 Git 摘要 | 默认同步，用于在不同设备上匹配同一个项目。 |
 | Agent 环境 | 根据 `init` 配置同步经过筛选的 Skills、MCP 意图和允许的 Session 设置。 |
 | 工作区与 Git 状态 | 可选，仅由 `push --workspace` 和 `resume --workspace` 传输。 |
 | 凭据与敏感信息 | 永不同步，包括 token、私钥、登录文件、headers、环境变量密钥和 `.env` 文件。 |
 
 项目文件和完整 Git 仓库不属于默认同步范围。
+跨设备显示 Codex App 名称时，两台设备都应更新到支持该名称元数据的 CtxHop 版本。
 
 ## 常用命令
 

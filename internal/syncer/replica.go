@@ -771,8 +771,11 @@ func FetchProjectReplicaMetadataWithDevices(ctx context.Context, store remote.Re
 			}
 			descriptor, descriptorErr := FetchSessionDescriptorForDevice(ctx, store, sessionLayout, deviceID, identities)
 			if descriptorErr == nil {
-				sessionDescriptor = &descriptor
-				break
+				if sessionDescriptor == nil || preferSessionTitleDescriptor(descriptor, *sessionDescriptor) {
+					copyDescriptor := descriptor
+					sessionDescriptor = &copyDescriptor
+				}
+				continue
 			}
 			if !errors.Is(descriptorErr, remote.ErrNotFound) {
 				return nil, descriptorErr
@@ -797,6 +800,18 @@ func FetchProjectReplicaMetadataWithDevices(ctx context.Context, store remote.Re
 		return nil, ErrNoReplicaMetadata
 	}
 	return result, nil
+}
+
+// preferSessionTitleDescriptor favors an explicit Codex App name over a
+// content-derived fallback, then the newest explicit rename. Device IDs are
+// scanned in sorted order and remain the deterministic tie-breaker.
+func preferSessionTitleDescriptor(candidate, current sessionhub.SessionDescriptor) bool {
+	candidateNamed := candidate.TitleSource == "codex-app"
+	currentNamed := current.TitleSource == "codex-app"
+	if candidateNamed != currentNamed {
+		return candidateNamed
+	}
+	return candidateNamed && candidate.TitleUpdatedAt.After(current.TitleUpdatedAt)
 }
 
 // FetchCompleteReplica reads, verifies and assembles one full Replica. It is
